@@ -1,1 +1,1 @@
-# stale-branch-report
+# stale-branches
