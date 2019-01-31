@@ -1,22 +1,41 @@
 import logging
+import operator
 import os
 import re
+from collections import defaultdict
 
 from github import Github, GithubException
 from jira import JIRA
 from jira import exceptions as jira_exceptions
 
 # env variables
-jira_url = os.getenv('jira_url')
-jira_key_cert_file_path = os.getenv('jira_key_cert_file_path')
-jira_access_token = os.getenv('jira_access_token')
-jira_access_token_secret = os.getenv('jira_access_token_secret')
-jira_consumer_key = os.getenv('jira_consumer_key')
-jira_statuses = os.getenv('jira_statuses')
+jira_url = os.environ.get('JIRA_URL')
+jira_key_cert_file_path = os.environ.get('JIRA_KEY_CERT_FILE_PATH')
+jira_access_token = os.environ.get('JIRA_ACCESS_TOKEN')
+jira_access_token_secret = os.environ.get('JIRA_ACCESS_TOKEN_SECRET')
+jira_consumer_key = os.environ.get('JIRA_CONSUMER_KEY')
+jira_statuses_for_task_completion = os.environ.get('JIRA_STATUSES_FOR_TASK_COMPLETION')
 
-github_access_token = os.getenv('github_access_token')
-repository_names = os.getenv('repository_names')
+github_access_token = os.environ.get('GITHUB_ACCESS_TOKEN')
+github_account = os.environ.get('GITHUB_ACCOUNT')
+github_repository_names = os.environ.get('REPOSITORY_LIST')
 # end env variables
+
+if not (jira_url and
+        jira_key_cert_file_path and
+        jira_access_token and
+        jira_access_token_secret and
+        jira_consumer_key and
+        github_access_token and
+        github_account and
+        github_repository_names):
+    logging.error('There are missing parameters, please check your environment variable setup.')
+    exit(1)
+
+jira_statuses_for_task_completion = jira_statuses_for_task_completion.split(',') \
+    if jira_statuses_for_task_completion else ('Resolved', 'Closed')
+
+github_repository_names = github_repository_names.split(',')
 
 # Jira authentication setup
 jira_key_cert_data = None
@@ -37,10 +56,17 @@ g = Github(github_access_token)
 # Look for stale branches for all the specified repos
 total_stale_branches = 0
 general_report = ''
-for repo_name in repository_names:
+author_count = defaultdict(int)
 
+for repo_name in github_repository_names:
     logging.debug(f'\nChecking repo: {repo_name}')
-    repo = g.get_repo(f'teamexos/{repo_name}')
+
+    try:
+        repo = g.get_repo(f'{github_account}/{repo_name}')
+    except GithubException:
+        logging.error(f'Github repository "{github_account}/{repo_name}" not found!')
+        continue
+
     repo_report = ''
 
     # confirm the name for the main develop branch
@@ -54,8 +80,8 @@ for repo_name in repository_names:
 
     branches = repo.get_branches()
     for branch in branches:
-        # only check feature branches
-        if not branch.name.startswith('feature/'):
+        # only check feature and hotfix branches
+        if not branch.name.startswith('feature/') and not branch.name.startswith('hotfix/'):
             continue
 
         # compare the branch against the main develop branch
@@ -75,10 +101,12 @@ for repo_name in repository_names:
             except jira_exceptions.JIRAError:
                 logging.debug(f"The ticket {ticket} specified in the branch name doesn't exist in Jira.")
 
-            if issue and issue.fields.status.name not in jira_statuses:
+            if issue and issue.fields.status.name not in jira_statuses_for_task_completion:
+                # the issue hasn't been marked as resolved in jira, so the branch may still be needed
                 continue
 
         author = branch.commit.author.login if branch.commit.author else 'Unknown'
+        author_count[author] += 1
         repo_report += f'\nBranch: {branch.name}, comparison status: {comparison.status}, author: {author}'
         if ticket:
             repo_report += f', ticket status: "{issue.fields.status.name}'
@@ -88,5 +116,8 @@ for repo_name in repository_names:
     if repo_report:
         general_report += f'Repo: {repo_name}, develop branch name: {main_develop_branch}{repo_report}\n\n'
 
-general_report = f'Total stale branches: {total_stale_branches}\n\n{general_report}'
+general_report = f'Total stale branches: {total_stale_branches}\n\n{general_report}\nCount by author:\n\n'
+for author, count in sorted(author_count.items(), key=operator.itemgetter(1), reverse=True):
+    general_report += f'{author}: {count}\n'
+
 print(general_report)
