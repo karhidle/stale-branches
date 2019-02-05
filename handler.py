@@ -49,9 +49,7 @@ def stale_branches():
     jira_statuses_for_task_completion = ssm_parameters['jira_statuses_for_task_completion'].split(',') \
         if ssm_parameters['jira_statuses_for_task_completion'] else ('Resolved', 'Closed')
 
-    print(ssm_parameters)
     repository_names = ssm_parameters['github_repository_names']
-    print(repository_names)
     github_repository_names = repository_names.split(',')
 
     jira_oauth_dict = {
