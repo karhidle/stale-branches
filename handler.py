@@ -163,11 +163,11 @@ def check_stale_branches(event: dict, context) -> dict:
         if repo_report:
             general_report += f'Repo: {repo_name}, develop branch name: {main_develop_branch}\n{repo_report}'
 
-    count_by_author = ''
-    for author, count in sorted(author_count.items(), key=operator.itemgetter(1), reverse=True):
-        count_by_author += f'{author}: {count}\n'
-
     if total_stale_branches:
+        count_by_author = ''
+        for author, count in sorted(author_count.items(), key=operator.itemgetter(1), reverse=True):
+            count_by_author += f'{author}: {count}\n'
+
         report_overview = f'Current number of stale branches: {total_stale_branches}\n\n'\
                           f'Count by author:\n{count_by_author}\n'
         report_details = f'Details:\n\n{general_report}'

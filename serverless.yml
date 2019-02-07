@@ -1,0 +1,33 @@
+# Report for stale branches in github repositories
+
+service: stale-branches
+
+provider:
+  name: aws
+  runtime: python3.6
+  profile: default
+  endpointType: REGIONAL
+  stage: dev # Set the default stage used. Default is dev
+  region: us-east-1 # Overwrite the default region used. Default is us-east-1
+  memorySize: 128
+  timeout: 30 # optional, in seconds, default is 6
+  tracing: true # enable tracing
+  iamRoleStatements:
+    - Effect: "Allow" # xray permissions (required)
+      Action:
+        - "xray:PutTraceSegments"
+        - "xray:PutTelemetryRecords"
+      Resource:
+        - "*"
+
+plugins:
+  - serverless-python-requirements
+custom:
+  pythonRequirements:
+    usePipenv: true
+    dockerizePip: true
+    invalidateCaches: true
+
+functions:
+  report_stale_branches:
+    handler: handler.check_stale_branches
